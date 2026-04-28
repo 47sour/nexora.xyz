@@ -1,16 +1,15 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/context/auth-context"
 import { DashboardCard } from "@/components/dashboard-card"
 import { GameCard } from "@/components/game-card"
-import { FriendCard } from "@/components/friend-card"
 import { InviteCard } from "@/components/invite-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { games } from "@/data/games"
-import { getOnlineFriends } from "@/data/friends"
 import { getPendingInvites } from "@/data/invites"
 import { userStats } from "@/data/user-stats"
 import {
@@ -23,22 +22,77 @@ import {
   ChevronRight,
   Sparkles,
   Shield,
+  User,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+type FriendUser = {
+  id: number
+  username: string
+  email: string
+  role: "user" | "admin"
+  xp: number
+  level: number
+  status: string
+  joined: string
+  friendsSince?: string
+}
+
+function getStatusClass(status: string) {
+  if (status === "online") return "bg-green-500"
+  if (status === "busy") return "bg-amber-500"
+  if (status === "offline") return "bg-muted-foreground"
+  if (status === "banned") return "bg-red-500"
+  if (status === "timeout") return "bg-orange-500"
+  return "bg-green-500"
+}
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth()
 
-  const onlineFriends = getOnlineFriends()
+  const [friends, setFriends] = useState<FriendUser[]>([])
+  const [friendsLoading, setFriendsLoading] = useState(true)
+
   const pendingInvites = getPendingInvites(user?.id?.toString() || "0")
   const recentGames = games.slice(0, 4)
+
+  const onlineFriends = useMemo(() => {
+    return friends.filter((friend) => friend.status === "online")
+  }, [friends])
 
   const currentLevel = user?.level ?? 1
   const currentXp = user?.xp ?? 0
   const xpToNextLevel = currentLevel * 1000
   const xpProgress = Math.min((currentXp / xpToNextLevel) * 100, 100)
 
-  const handleInviteFriend = (friendId: string) => {
-    alert(`Invite sent to friend ${friendId}!`)
+  useEffect(() => {
+    if (!isLoading && user) {
+      loadFriends()
+    }
+  }, [isLoading, user])
+
+  async function loadFriends() {
+    setFriendsLoading(true)
+
+    try {
+      const res = await fetch("/api/friends", {
+        credentials: "include",
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setFriends(data.friends || [])
+      }
+    } catch {
+      setFriends([])
+    } finally {
+      setFriendsLoading(false)
+    }
+  }
+
+  const handleInviteFriend = (friend: FriendUser) => {
+    alert(`Invite sent to ${friend.username}!`)
   }
 
   const handleAcceptInvite = (inviteId: string) => {
@@ -49,7 +103,7 @@ export default function DashboardPage() {
     alert(`Invite ${inviteId} declined!`)
   }
 
-  if (isLoading) {
+  if (isLoading || friendsLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -253,14 +307,39 @@ export default function DashboardPage() {
             <Card className="border-border bg-card">
               <CardContent className="p-2">
                 {onlineFriends.length > 0 ? (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {onlineFriends.slice(0, 5).map((friend) => (
-                      <FriendCard
+                      <div
                         key={friend.id}
-                        friend={friend}
-                        compact
-                        onInvite={handleInviteFriend}
-                      />
+                        className="flex items-center justify-between rounded-lg p-2 hover:bg-background/70"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-primary/20">
+                            <User className="h-4 w-4 text-primary" />
+                            <span
+                              className={cn(
+                                "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-card",
+                                getStatusClass(friend.status)
+                              )}
+                            />
+                          </div>
+
+                          <div>
+                            <p className="text-sm font-medium">{friend.username}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Level {friend.level}
+                            </p>
+                          </div>
+                        </div>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleInviteFriend(friend)}
+                        >
+                          Invite
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 ) : (
