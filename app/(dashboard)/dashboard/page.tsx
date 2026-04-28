@@ -5,12 +5,10 @@ import Link from "next/link"
 import { useAuth } from "@/context/auth-context"
 import { DashboardCard } from "@/components/dashboard-card"
 import { GameCard } from "@/components/game-card"
-import { InviteCard } from "@/components/invite-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { games } from "@/data/games"
-import { getPendingInvites } from "@/data/invites"
 import { userStats } from "@/data/user-stats"
 import {
   Gamepad2,
@@ -23,6 +21,8 @@ import {
   Sparkles,
   Shield,
   User,
+  Check,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -38,6 +38,21 @@ type FriendUser = {
   friendsSince?: string
 }
 
+type IncomingInvitation = {
+  id: number
+  senderId: number
+  receiverId: number
+  gameId: string
+  gameName: string
+  status: string
+  createdAt: string
+  senderUsername: string
+  senderEmail: string
+  senderLevel: number
+  senderXp: number
+  senderStatus: string
+}
+
 function getStatusClass(status: string) {
   if (status === "online") return "bg-green-500"
   if (status === "busy") return "bg-amber-500"
@@ -51,9 +66,11 @@ export default function DashboardPage() {
   const { user, isLoading } = useAuth()
 
   const [friends, setFriends] = useState<FriendUser[]>([])
+  const [invitations, setInvitations] = useState<IncomingInvitation[]>([])
   const [friendsLoading, setFriendsLoading] = useState(true)
+  const [invitationsLoading, setInvitationsLoading] = useState(true)
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
 
-  const pendingInvites = getPendingInvites(user?.id?.toString() || "0")
   const recentGames = games.slice(0, 4)
 
   const onlineFriends = useMemo(() => {
@@ -68,6 +85,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isLoading && user) {
       loadFriends()
+      loadInvitations()
     }
   }, [isLoading, user])
 
@@ -91,19 +109,124 @@ export default function DashboardPage() {
     }
   }
 
-  const handleInviteFriend = (friend: FriendUser) => {
-    alert(`Invite sent to ${friend.username}!`)
+  async function loadInvitations() {
+    setInvitationsLoading(true)
+
+    try {
+      const res = await fetch("/api/invitations", {
+        credentials: "include",
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setInvitations(data.incoming || [])
+      }
+    } catch {
+      setInvitations([])
+    } finally {
+      setInvitationsLoading(false)
+    }
   }
 
-  const handleAcceptInvite = (inviteId: string) => {
-    alert(`Invite ${inviteId} accepted!`)
+  async function sendInviteToFriend(friend: FriendUser) {
+    const game = games[0]
+
+    if (!game) {
+      alert("No game available.")
+      return
+    }
+
+    try {
+      const res = await fetch("/api/invitations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          receiverId: friend.id,
+          gameId: game.id,
+          gameName: game.name,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Invite failed.")
+        return
+      }
+
+      alert(`Invite sent to ${friend.username} for ${game.name}!`)
+    } catch {
+      alert("Server connection failed.")
+    }
   }
 
-  const handleDeclineInvite = (inviteId: string) => {
-    alert(`Invite ${inviteId} declined!`)
+  async function handleAcceptInvite(inviteId: number) {
+    setActionLoadingId(inviteId)
+
+    try {
+      const res = await fetch(`/api/invitations/${inviteId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "accept",
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Invite could not be accepted.")
+        return
+      }
+
+      await loadInvitations()
+
+      alert("Invitation accepted. Lobby system can be connected next.")
+    } catch {
+      alert("Server connection failed.")
+    } finally {
+      setActionLoadingId(null)
+    }
   }
 
-  if (isLoading || friendsLoading) {
+  async function handleDeclineInvite(inviteId: number) {
+    setActionLoadingId(inviteId)
+
+    try {
+      const res = await fetch(`/api/invitations/${inviteId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "decline",
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || "Invite could not be declined.")
+        return
+      }
+
+      await loadInvitations()
+    } catch {
+      alert("Server connection failed.")
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  if (isLoading || friendsLoading || invitationsLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -263,24 +386,63 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {pendingInvites.length > 0 && (
+          {invitations.length > 0 && (
             <div>
               <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
                 <Swords className="h-5 w-5 text-secondary" />
                 Invitations
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
-                  {pendingInvites.length}
+                  {invitations.length}
                 </span>
               </h3>
 
               <div className="space-y-3">
-                {pendingInvites.slice(0, 2).map((invite) => (
-                  <InviteCard
-                    key={invite.id}
-                    invite={invite}
-                    onAccept={handleAcceptInvite}
-                    onDecline={handleDeclineInvite}
-                  />
+                {invitations.slice(0, 2).map((invite) => (
+                  <Card key={invite.id} className="border-border bg-card">
+                    <CardContent className="p-4">
+                      <div className="mb-3 flex items-center gap-3">
+                        <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-secondary/20">
+                          <User className="h-5 w-5 text-secondary" />
+                          <span
+                            className={cn(
+                              "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-card",
+                              getStatusClass(invite.senderStatus)
+                            )}
+                          />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {invite.senderUsername}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            invited you to {invite.gameName}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleAcceptInvite(invite.id)}
+                          disabled={actionLoadingId === invite.id}
+                        >
+                          <Check className="mr-1 h-4 w-4" />
+                          Accept
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeclineInvite(invite.id)}
+                          disabled={actionLoadingId === invite.id}
+                        >
+                          <X className="mr-1 h-4 w-4" />
+                          Decline
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             </div>
@@ -335,7 +497,7 @@ export default function DashboardPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => handleInviteFriend(friend)}
+                          onClick={() => sendInviteToFriend(friend)}
                         >
                           Invite
                         </Button>

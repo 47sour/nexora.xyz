@@ -1,219 +1,164 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import { useAuth } from './auth-context'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { io, type Socket } from "socket.io-client"
+import { useAuth } from "@/context/auth-context"
 
-export interface ChatMessage {
-  id: string
-  senderId: string
+export type GlobalMessage = {
+  id: number
+  senderId: number
   senderUsername: string
   senderLevel: number
   content: string
   timestamp: Date
-  type: 'global' | 'private'
-  recipientId?: string
 }
 
-export interface PrivateChat {
-  oderId: string
-  odreUsername: string
-  isOpen: boolean
-  isMinimized: boolean
-  messages: ChatMessage[]
-}
-
-interface ChatContextType {
-  globalMessages: ChatMessage[]
-  privateChats: PrivateChat[]
+type ChatContextType = {
+  globalMessages: GlobalMessage[]
   isGlobalChatOpen: boolean
-  sendGlobalMessage: (content: string) => void
-  sendPrivateMessage: (oderId: string, content: string) => void
-  openPrivateChat: (oder: { id: string; username: string }) => void
-  closePrivateChat: (oderId: string) => void
-  toggleMinimizePrivateChat: (oderId: string) => void
+  isConnected: boolean
+  chatError: string
+  sendGlobalMessage: (message: string) => void
   toggleGlobalChat: () => void
   closeGlobalChat: () => void
+  openGlobalChat: () => void
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined)
-
-// Demo global messages
-const demoGlobalMessages: ChatMessage[] = [
-  {
-    id: '1',
-    senderId: '3',
-    senderUsername: 'ProGamer99',
-    senderLevel: 42,
-    content: 'Hey everyone! Anyone up for some Neon Racing?',
-    timestamp: new Date(Date.now() - 300000),
-    type: 'global'
-  },
-  {
-    id: '2',
-    senderId: '4',
-    senderUsername: 'ShadowBlade',
-    senderLevel: 38,
-    content: 'Just hit level 38! Let\'s go!',
-    timestamp: new Date(Date.now() - 240000),
-    type: 'global'
-  },
-  {
-    id: '3',
-    senderId: '5',
-    senderUsername: 'PixelQueen',
-    senderLevel: 55,
-    content: 'GG to everyone in the last Cyber Arena match',
-    timestamp: new Date(Date.now() - 180000),
-    type: 'global'
-  },
-  {
-    id: '4',
-    senderId: '6',
-    senderUsername: 'NightHawk',
-    senderLevel: 29,
-    content: 'Anyone want to team up for the new puzzle game?',
-    timestamp: new Date(Date.now() - 120000),
-    type: 'global'
-  },
-  {
-    id: '5',
-    senderId: '7',
-    senderUsername: 'CryptoKing',
-    senderLevel: 61,
-    content: 'The new update is amazing!',
-    timestamp: new Date(Date.now() - 60000),
-    type: 'global'
-  }
-]
+const ChatContext = createContext<ChatContextType | null>(null)
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
-  const [globalMessages, setGlobalMessages] = useState<ChatMessage[]>(demoGlobalMessages)
-  const [privateChats, setPrivateChats] = useState<PrivateChat[]>([])
+  const { user, isAuthenticated, isLoading } = useAuth()
+  const socketRef = useRef<Socket | null>(null)
+
+  const [globalMessages, setGlobalMessages] = useState<GlobalMessage[]>([])
   const [isGlobalChatOpen, setIsGlobalChatOpen] = useState(false)
+  const [isConnected, setIsConnected] = useState(false)
+  const [chatError, setChatError] = useState("")
 
-  const sendGlobalMessage = useCallback((content: string) => {
-    if (!user || !content.trim()) return
+  useEffect(() => {
+    if (isLoading) return
 
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      senderId: user.id,
-      senderUsername: user.username,
-      senderLevel: user.level,
-      content: content.trim(),
-      timestamp: new Date(),
-      type: 'global'
+    if (!isAuthenticated || !user) {
+      socketRef.current?.disconnect()
+      socketRef.current = null
+      setIsConnected(false)
+      setGlobalMessages([])
+      return
     }
 
-    setGlobalMessages(prev => [...prev, newMessage])
-  }, [user])
-
-  const sendPrivateMessage = useCallback((oderId: string, content: string) => {
-    if (!user || !content.trim()) return
-
-    const newMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      senderId: user.id,
-      senderUsername: user.username,
-      senderLevel: user.level,
-      content: content.trim(),
-      timestamp: new Date(),
-      type: 'private',
-      recipientId: oderId
-    }
-
-    setPrivateChats(prev => prev.map(chat => 
-      chat.oderId === oderId 
-        ? { ...chat, messages: [...chat.messages, newMessage] }
-        : chat
-    ))
-
-    // Simulate a response after a short delay (demo only)
-    setTimeout(() => {
-      const chat = privateChats.find(c => c.oderId === oderId)
-      if (chat) {
-        const responses = [
-          'Hey! What\'s up?',
-          'Sure, sounds good!',
-          'I\'m in a game right now, give me 5 min',
-          'Haha nice one!',
-          'Let\'s do it!'
-        ]
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)]
-        
-        const responseMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          senderId: oderId,
-          senderUsername: chat.odreUsername,
-          senderLevel: Math.floor(Math.random() * 50) + 10,
-          content: randomResponse,
-          timestamp: new Date(),
-          type: 'private',
-          recipientId: user.id
-        }
-
-        setPrivateChats(prev => prev.map(c => 
-          c.oderId === oderId 
-            ? { ...c, messages: [...c.messages, responseMessage] }
-            : c
-        ))
-      }
-    }, 1500 + Math.random() * 2000)
-  }, [user, privateChats])
-
-  const openPrivateChat = useCallback((oder: { id: string; username: string }) => {
-    setPrivateChats(prev => {
-      const existingChat = prev.find(c => c.oderId === oder.id)
-      if (existingChat) {
-        return prev.map(c => 
-          c.oderId === oder.id 
-            ? { ...c, isOpen: true, isMinimized: false }
-            : c
-        )
-      }
-      return [...prev, {
-        oderId: oder.id,
-        odreUsername: oder.username,
-        isOpen: true,
-        isMinimized: false,
-        messages: []
-      }]
+    const socket = io({
+      path: "/socket.io",
+      withCredentials: true,
+      transports: ["websocket", "polling"],
     })
-  }, [])
 
-  const closePrivateChat = useCallback((oderId: string) => {
-    setPrivateChats(prev => prev.filter(c => c.oderId !== oderId))
-  }, [])
+    socketRef.current = socket
 
-  const toggleMinimizePrivateChat = useCallback((oderId: string) => {
-    setPrivateChats(prev => prev.map(c => 
-      c.oderId === oderId 
-        ? { ...c, isMinimized: !c.isMinimized }
-        : c
-    ))
-  }, [])
+    socket.on("connect", () => {
+      setIsConnected(true)
+      setChatError("")
+    })
 
-  const toggleGlobalChat = useCallback(() => {
-    setIsGlobalChatOpen(prev => !prev)
-  }, [])
+    socket.on("disconnect", () => {
+      setIsConnected(false)
+    })
 
-  const closeGlobalChat = useCallback(() => {
+    socket.on("connect_error", () => {
+      setIsConnected(false)
+      setChatError("Chat-Verbindung fehlgeschlagen.")
+    })
+
+    socket.on("global:history", (messages) => {
+      setGlobalMessages(
+        messages.map((message: any) => ({
+          id: Number(message.id),
+          senderId: Number(message.senderId),
+          senderUsername: String(message.senderUsername),
+          senderLevel: Number(message.senderLevel || 1),
+          content: String(message.content),
+          timestamp: new Date(message.createdAt),
+        }))
+      )
+    })
+
+    socket.on("global:message", (message) => {
+      setGlobalMessages((prev) => {
+        const exists = prev.some((item) => item.id === Number(message.id))
+
+        if (exists) return prev
+
+        return [
+          ...prev,
+          {
+            id: Number(message.id),
+            senderId: Number(message.senderId),
+            senderUsername: String(message.senderUsername),
+            senderLevel: Number(message.senderLevel || 1),
+            content: String(message.content),
+            timestamp: new Date(message.createdAt),
+          },
+        ].slice(-100)
+      })
+    })
+
+    socket.on("global:error", (message) => {
+      setChatError(String(message))
+    })
+
+    return () => {
+      socket.disconnect()
+      socketRef.current = null
+      setIsConnected(false)
+    }
+  }, [isLoading, isAuthenticated, user])
+
+  function sendGlobalMessage(message: string) {
+    const content = message.trim()
+
+    if (!content) return
+
+    if (!socketRef.current || !isConnected) {
+      setChatError("Chat ist nicht verbunden.")
+      return
+    }
+
+    socketRef.current.emit("global:message", {
+      content,
+    })
+  }
+
+  function toggleGlobalChat() {
+    setIsGlobalChatOpen((prev) => !prev)
+  }
+
+  function closeGlobalChat() {
     setIsGlobalChatOpen(false)
-  }, [])
+  }
+
+  function openGlobalChat() {
+    setIsGlobalChatOpen(true)
+  }
 
   return (
-    <ChatContext.Provider value={{
-      globalMessages,
-      privateChats,
-      isGlobalChatOpen,
-      sendGlobalMessage,
-      sendPrivateMessage,
-      openPrivateChat,
-      closePrivateChat,
-      toggleMinimizePrivateChat,
-      toggleGlobalChat,
-      closeGlobalChat
-    }}>
+    <ChatContext.Provider
+      value={{
+        globalMessages,
+        isGlobalChatOpen,
+        isConnected,
+        chatError,
+        sendGlobalMessage,
+        toggleGlobalChat,
+        closeGlobalChat,
+        openGlobalChat,
+      }}
+    >
       {children}
     </ChatContext.Provider>
   )
@@ -221,8 +166,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
 export function useChat() {
   const context = useContext(ChatContext)
-  if (context === undefined) {
-    throw new Error('useChat must be used within a ChatProvider')
+
+  if (!context) {
+    throw new Error("useChat must be used inside ChatProvider")
   }
+
   return context
 }

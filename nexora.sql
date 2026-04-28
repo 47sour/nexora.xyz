@@ -46,3 +46,34 @@ CREATE TABLE friends (
 
   UNIQUE KEY unique_friendship (user_id, friend_id)
 );
+
+CREATE TABLE game_invitations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  sender_id INT NOT NULL,
+  receiver_id INT NOT NULL,
+  game_id VARCHAR(100) NOT NULL,
+  game_name VARCHAR(150) NOT NULL,
+  status ENUM('pending', 'accepted', 'declined', 'cancelled') NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_game_invites_sender
+    FOREIGN KEY (sender_id) REFERENCES users(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_game_invites_receiver
+    FOREIGN KEY (receiver_id) REFERENCES users(id)
+    ON DELETE CASCADE
+);
+
+
+CREATE TABLE global_chat_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  sender_id INT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT fk_global_chat_sender
+    FOREIGN KEY (sender_id) REFERENCES users(id)
+    ON DELETE CASCADE
+);
