@@ -6,7 +6,6 @@ import { useAuth } from '@/context/auth-context'
 import { ChatProvider } from '@/context/chat-context'
 import { Navbar } from '@/components/navbar'
 import { GlobalChat } from '@/components/global-chat'
-import { PrivateChatContainer } from '@/components/private-chat'
 
 export default function DashboardLayout({
   children,
@@ -42,7 +41,6 @@ export default function DashboardLayout({
           {children}
         </main>
         <GlobalChat />
-        <PrivateChatContainer />
       </div>
     </ChatProvider>
   )
