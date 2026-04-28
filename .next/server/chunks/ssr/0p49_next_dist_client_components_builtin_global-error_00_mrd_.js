@@ -1,0 +1,3 @@
+module.exports=[99038,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(6230);a.n(d("[project]/Desktop/minckmedia/nexora.xyz/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},69993,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(6230);a.n(d("[project]/Desktop/minckmedia/nexora.xyz/node_modules/next/dist/client/components/builtin/global-error.js"))},14182,a=>{"use strict";a.i(99038);var b=a.i(69993);a.n(b)},43182,a=>{a.n(a.i(14182))}];
+
+//# sourceMappingURL=0p49_next_dist_client_components_builtin_global-error_00_mrd_.js.map
