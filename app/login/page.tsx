@@ -67,13 +67,12 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Demo Credentials Info */}
             <Alert className="mb-6 border-primary/30 bg-primary/10">
               <Info className="h-4 w-4 text-primary" />
               <AlertDescription className="text-sm">
-                <span className="font-medium">Demo Accounts:</span>
+                <span className="font-medium">Account Daten:</span>
                 <br />
-                admin / admin123 or player / player123
+                erstell account du hund
               </AlertDescription>
             </Alert>
 

@@ -1145,6 +1145,10 @@
     min-height: calc(var(--spacing) * 16);
   }
 
+  .min-h-\[60vh\] {
+    min-height: 60vh;
+  }
+
   .min-h-\[100px\] {
     min-height: 100px;
   }
@@ -2140,6 +2144,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .bg-blue-500\/10 {
       background-color: color-mix(in oklab, var(--color-blue-500) 10%, transparent);
+    }
+  }
+
+  .bg-blue-500\/20 {
+    background-color: #3080ff33;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-blue-500\/20 {
+      background-color: color-mix(in oklab, var(--color-blue-500) 20%, transparent);
     }
   }
 

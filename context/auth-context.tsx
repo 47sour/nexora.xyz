@@ -1,118 +1,169 @@
 "use client"
 
-/**
- * NEXORA - Demo Authentication Context
- * 
- * PROTOTYPE ONLY - Not for production use
- * This provides a simple auth state management using React Context and localStorage.
- */
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react"
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { DemoUser, validateLogin, getUserById, AUTH_STORAGE_KEY } from '@/config/auth-config'
-
-interface AuthContextType {
-  user: DemoUser | null
-  isLoading: boolean
-  isAuthenticated: boolean
-  login: (usernameOrEmail: string, password: string) => Promise<{ success: boolean; error?: string }>
-  logout: () => void
-  register: (username: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>
+export type User = {
+  id: number
+  username: string
+  email: string
+  role: "user" | "admin"
+  xp: number
+  level: number
+  status: "online" | "offline" | "busy"
+  joined: string
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+type AuthResult = {
+  success: boolean
+  error?: string
+}
+
+type AuthContextType = {
+  user: User | null
+  isAuthenticated: boolean
+  isLoading: boolean
+  login: (identifier: string, password: string) => Promise<AuthResult>
+  register: (
+    username: string,
+    email: string,
+    password: string
+  ) => Promise<AuthResult>
+  logout: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<DemoUser | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Restore session on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem(AUTH_STORAGE_KEY)
-    if (storedUser) {
+    async function loadUser() {
       try {
-        const parsed = JSON.parse(storedUser)
-        const validUser = getUserById(parsed.id)
-        if (validUser && validUser.status === 'active') {
-          setUser(validUser)
-        } else {
-          localStorage.removeItem(AUTH_STORAGE_KEY)
+        const res = await fetch("/api/auth/me", {
+          credentials: "include",
+        })
+
+        if (!res.ok) {
+          setUser(null)
+          return
         }
+
+        const data = await res.json()
+        setUser(data.user)
       } catch {
-        localStorage.removeItem(AUTH_STORAGE_KEY)
+        setUser(null)
+      } finally {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
+
+    loadUser()
   }, [])
 
-  const login = async (usernameOrEmail: string, password: string) => {
-    // Simulate network delay for realistic UX
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    
-    const validUser = validateLogin(usernameOrEmail, password)
-    if (validUser) {
-      // Check if user is banned or timed out
-      if (validUser.status === 'banned') {
-        return { 
-          success: false, 
-          error: `This account has been banned. Reason: ${validUser.banReason || 'No reason provided'}` 
-        }
-      }
-      
-      if (validUser.status === 'timeout') {
-        return { 
-          success: false, 
-          error: `This account is timed out until ${validUser.timeoutUntil}` 
+  async function login(
+    identifier: string,
+    password: string
+  ): Promise<AuthResult> {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          identifier,
+          password,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        return {
+          success: false,
+          error: data.error || "Login fehlgeschlagen.",
         }
       }
 
-      // Don't store password in localStorage
-      const safeUser = { ...validUser, password: undefined }
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser))
-      setUser(validUser)
+      setUser(data.user)
+
       return { success: true }
+    } catch {
+      return {
+        success: false,
+        error: "Serververbindung fehlgeschlagen.",
+      }
     }
-    return { success: false, error: 'Invalid username/email or password' }
   }
 
-  const logout = () => {
-    localStorage.removeItem(AUTH_STORAGE_KEY)
-    setUser(null)
+  async function register(
+    username: string,
+    email: string,
+    password: string
+  ): Promise<AuthResult> {
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        return {
+          success: false,
+          error: data.error || "Registrierung fehlgeschlagen.",
+        }
+      }
+
+      setUser(data.user)
+
+      return { success: true }
+    } catch {
+      return {
+        success: false,
+        error: "Serververbindung fehlgeschlagen.",
+      }
+    }
   }
 
-  const register = async (username: string, email: string, password: string) => {
-    // In prototype, just simulate registration
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    
-    // For demo, create a new user session (won't persist across refreshes)
-    const newUser: DemoUser = {
-      id: `new_${Date.now()}`,
-      username,
-      email,
-      password,
-      avatar: '/avatars/default.png',
-      role: 'user',
-      level: 1,
-      xp: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-      status: 'active'
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      })
+    } finally {
+      setUser(null)
+      window.location.href = "/login"
     }
-    
-    const safeUser = { ...newUser, password: undefined }
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safeUser))
-    setUser(newUser)
-    
-    return { success: true }
   }
 
   return (
     <AuthContext.Provider
       value={{
         user,
+        isAuthenticated: Boolean(user),
         isLoading,
-        isAuthenticated: !!user,
         login,
+        register,
         logout,
-        register
       }}
     >
       {children}
@@ -122,8 +173,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
+
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider")
   }
+
   return context
 }

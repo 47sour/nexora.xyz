@@ -81,12 +81,11 @@ export default function RegisterPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Prototype Notice */}
             <Alert className="mb-6 border-secondary/30 bg-secondary/10">
               <Info className="h-4 w-4 text-secondary" />
               <AlertDescription className="text-sm">
-                <span className="font-medium">Prototype Mode:</span> Registration is disabled. 
-                Use demo accounts: admin/admin123 or player/player123
+                <span className="font-medium">Nutze ich das?</span>
+                Test Message Box
               </AlertDescription>
             </Alert>
 
